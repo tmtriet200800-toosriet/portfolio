@@ -1,0 +1,147 @@
+---
+title: "Breakdown useEffect in React: Why do many people hate useEffect"
+publishedAt: "2025-02-02"
+image: "/images/blogs/breakdown-use-effect-why-do-many-people-hate-use-effect.jpg"
+summary: "Every career is a journey, filled with challenges, growth, and those significant moments that mark a shift in our path."
+tag: "Journal"
+---
+
+## Why useEffect ?
+
+It's clear that useEffect is one of the most commonly used hooks in React. If you go through 10 React course, all of them will likely mention to `useEffect`. React itself also emphasizes the important of `useEffect` - its official documentation includes five dedicated sections just discussing about how to handle side effect in React. Despite its popularity, `useEffect` seem like not friendly with React community. In fact, there’s been a growing discussion among experts who are trying to convince others to "Say Goodbye to `useEffect`." So, what’s going on with `useEffect`? Let’s break it down together.
+
+## Is useEffect unintuitive ?
+
+When discussing why a function might feel unintuitive, we might think that its document isn't clear enough in explaining its purpose. However, it’s not a case for `useEffect`. Let’s have a look in React document about the definition of `useEffect`
+
+> useEffect is a React Hook that lets you [synchronize a component with an external system.](https://react.dev/learn/synchronizing-with-effects)
+
+What's the heck is `external system` ? 
+If you scroll down a bit then you will find the definition for this term
+
+> Some components need to stay connected to the network, some browser API, or a third-party library, while they are displayed on the page. These systems aren’t controlled by React, so they are called _external.
+
+So by theory, in React `useEffect` is created when you want to synchronize internal state (state is created by our code - useState, useContext) with external state (local storage, network, etc..). 
+
+However, in reality, `useEffect` is considered as a powerful tools for hooking into the initialization of component, or watching changes **<u>not only in internal data but also in external data</u>**.
+
+Let’s take a look on this example. Let's say we want to create a custom hook usePrevious to get the previous data when state change to new value.
+
+With FE mindset, it’s very intuitive to come up with a solution listening on the changes of state by using `useEffect`, much like the [approach taken by libraries such as `react-use`](https://github.com/streamich/react-use/blob/master/src/usePrevious.ts).
+
+```jsx
+export default function usePrevious<T>(state: T): T | undefined {
+  const ref = useRef<T>();
+
+  useEffect(() => {
+    ref.current = state;
+  });
+
+  return ref.current;
+}
+```
+
+It’s make sense but it’s the thing React doesn’t want us to do. By definition, we should only `useEffect` when we need to sync with **<u>external state</u>**, however, in this scenario no external involved.
+
+Instead, we need to solve the problem as same as the approach of [useHook library](https://github.com/uidotdev/usehooks/blob/90fbbb4cc085e74e50c36a62a5759a40c62bb98e/index.js#L1017)
+```jsx
+export function usePrevious(value) {
+  const [current, setCurrent] = React.useState(value);
+  const [previous, setPrevious] = React.useState(null);
+
+  if (value !== current) {
+    setPrevious(current);
+    setCurrent(value);
+  }
+
+  return previous;
+}
+
+```
+
+In this code, we call two `setState` functions. However, React is very efficient at batching state updates—it will calculate the changes and renders only once.
+
+Because `useEffect` is very power, easily to overuse in wrong way and addicted that make some developer in React community don't like it. Beside, if you overuse useEffect in a wrong way you may encounters some problems
+
+## What if we continue useEffect in a wrong way ?
+
+`useEffect` is clearly a good tool for handling side effect, however, if we don't use it properly we may encounter some issues
+
+### Your app may got performance issue
+Keep using `useEffect` as a tracking tool for all purpose may let your brain lazy in coming up better solution to solve the need.
+
+Let’s have a look on this example
+You're received a task building the search filter. If you overuse `useEffect`, you may come up with the solution like this
+```jsx
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [filteredItems, setFilteredItems] = React.useState(items);
+  
+  useEffect(()=>{
+	  setFilteredItems(
+		  MOCK_DATA.filter((item) =>
+		      item.toLowerCase().includes(searchTerm)
+		)
+	)
+  }, [searchTerm])
+  
+  const handleSearch = (e)=>{
+    setSearchTerm(e.target.value)
+  }
+```
+
+Unfortunately, it’s not a good approach as your application have to render twice when keyword changes
+- First render for setSearchTerm call in handleSearch function
+- After searchTerm is updated to expected value, `useEffect` will be called and invoke setFilteredItems and trigger second render
+
+Instead, we can batch the state updates into one, as React is very efficient at rendering. Even if we call two `setState` functions simultaneously, they only trigger a single render with this approach.
+
+```jsx
+  const [searchTerm, setSearchTerm] = React.useState("");
+  const [filteredItems, setFilteredItems] = React.useState(items);
+
+  const handleSearch = (e)=>{
+    const newvalue = e.target.value
+    
+    setSearchTerm(newvalue)
+    const result = items.filter((item) =>
+      item.toLowerCase().includes(newvalue.toLowerCase())
+    );
+    setFilteredItems(result);
+  }
+```
+
+### Inconsistence in coding style
+Imagine you’re working in a team where they're very good in React and you use `useEffect` like a tracking tools for all purpose. As a result, it will make your college are not happy and it’s might impact to your promotion
+
+### useEffect remains unintuitive
+Yes, if we don't use `useEffect` correctly, you might encounter bugs due to its unintuitive behavior, as shown in the image below.
+
+The reason for above bug come from overusing of `useEffect` then the author doesn't know when `useEffect` is invoked in React render lifecycle (TLDR: React will only render when state change → After render, React will start invoking `useEffect` function to handle side-effect)
+If you understand React render lifecycle you may realize the pathname inside `useEffect` code will always be the latest value (not the previous one)
+
+## What is the good example for correct usage of `useEffect`
+ As we mention earlier `useEffect` is created for handling side-effect, so we expect code inside `useEffect` should be related to side-effect (updating DOM, managing localStorage, calling API, etc..)
+ In below example, we're trying to build a component that can help us update the tab title by clicking different button
+ We need `useEffect` in this scenario to help us synchronize the data between internal state (React state) and external state (window.document.title)
+
+```jsx
+function DocumentTitleChanger() {
+  const [title, setTitle] = useState('Default Title');
+
+  useEffect(() => {
+    // This will run every time "title" changes.
+    document.title = title;
+  }, [title]);
+
+  return (
+    <div>
+      <h1>Change Document Title</h1>
+      <button onClick={() => setTitle('Title One')}>Title One</button>
+      <button onClick={() => setTitle('Title Two')}>Title Two</button>
+      <button onClick={() => setTitle('Title Three')}>Title Three</button>
+    </div>
+  );
+}
+```
+
+That it’s for this post. I hope this post can help you understand more about `useEffect` and help you use `useEffect` in a more correct ways. Mastering side-effect is not an easy task in React, please let's me know your attention by follow / react on this post. If you find it useful, I will work on writing more post in the future for mastering side-effect
