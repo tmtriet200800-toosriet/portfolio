@@ -54,7 +54,7 @@ const home = {
   headline: <>Software engineer and builder</>,
   subline: (
     <>
-      I'm Triet, a <InlineCode>software engineer</InlineCode>. I love programming, building products and sharing my thoughts.
+      I'm Triet (aka <InlineCode>TOOSRIET</InlineCode>), a software engineer. I love programming, building products and sharing my thoughts.
     </>
   ),
 };
